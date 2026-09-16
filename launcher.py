@@ -28,11 +28,13 @@ import gamedetector
 DEFAULT_APP_DIR = Path.home() / "Documents" / "MultiLaunch"
 APP_DIR = Path(os.environ.get("MULTILAUNCH_HOME", DEFAULT_APP_DIR))
 GAMES_FILE = APP_DIR / "data.json"
+UPDATE_STATE_FILE = APP_DIR / "update-state.json"
 LOG_DIR = APP_DIR / "logs"
 APP_NAME = "MultiLaunch"
 APP_AUTHOR = "Luke Coulon"
 PROJECT_ROOT = Path(__file__).resolve().parent
 VERSION_FILE = PROJECT_ROOT / "version.json"
+UPDATE_FILE = PROJECT_ROOT / "update.json"
 GITHUB_REPOSITORY = "LukeCOULON/multilaunch"
 IGNORED_EXECUTABLE_NAMES = {
     "setup", "install", "installer", "unins000", "uninstall", "uninstaller",
@@ -146,6 +148,36 @@ def compare_versions(local: str, remote: str) -> int:
     return (padded_left > padded_right) - (padded_left < padded_right)
 
 
+def read_update_file(path: Path = UPDATE_FILE) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Impossible de lire les nouveautés: {error}") from error
+    if not isinstance(data, dict) or not isinstance(data.get("version"), str) or not isinstance(data.get("items"), list):
+        raise RuntimeError("update.json ne contient pas un format valide")
+    return data
+
+
+def should_show_updates() -> bool:
+    updates = read_update_file()
+    if not UPDATE_STATE_FILE.exists():
+        return True
+    try:
+        state = json.loads(UPDATE_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return True
+    return state.get("last_seen_version") != updates["version"]
+
+
+def mark_updates_seen() -> None:
+    updates = read_update_file()
+    ensure_storage()
+    UPDATE_STATE_FILE.write_text(
+        json.dumps({"last_seen_version": updates["version"]}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
 def fetch_remote_version(timeout: float = 8.0) -> dict[str, Any]:
     urls = [
         f"https://raw.githubusercontent.com/{GITHUB_REPOSITORY}/main/version.json",
@@ -183,7 +215,7 @@ def install_update(remote: dict[str, Any], timeout: float = 30.0) -> Path:
     archive_url = f"https://github.com/{GITHUB_REPOSITORY}/archive/refs/heads/{branch}.zip"
     backup_dir = APP_DIR / "updates" / dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_dir.mkdir(parents=True, exist_ok=True)
-    update_files = {"launcher.py", "gui.py", "gamedetector.py", "version.json", "test_launcher.py"}
+    update_files = {"launcher.py", "gui.py", "gamedetector.py", "version.json", "update.json", "test_launcher.py"}
     with tempfile.TemporaryDirectory(prefix="multilaunch-update-") as temporary:
         archive_path = Path(temporary) / "update.zip"
         request = urllib.request.Request(archive_url, headers={"User-Agent": "MultiLaunch-Updater"})

@@ -16,6 +16,14 @@ import launcher
 APP_NAME = "MultiLaunch"
 APP_SUBTITLE = "Launcher de jeux Linux · Wine · Proton"
 APP_AUTHOR = "Créé par Luke Coulon"
+BG_COLOR = "#0b1220"
+PANEL_COLOR = "#141e2d"
+FIELD_COLOR = "#1d2a3b"
+TEXT_COLOR = "#edf4fb"
+MUTED_COLOR = "#8ea2b8"
+ACCENT_COLOR = "#38bdf8"
+SUCCESS_COLOR = "#4ade80"
+WARNING_COLOR = "#fbbf24"
 
 
 class LauncherWindow(tk.Tk):
@@ -29,31 +37,37 @@ class LauncherWindow(tk.Tk):
         self.detected_candidates: list[launcher.DetectedCandidate] = []
         self.scan_window: tk.Toplevel | None = None
         self.scan_cancelled = False
+        self._resize_pending = False
         self._configure_style()
         self._build_ui()
+        self.bind("<Configure>", self._on_resize)
         self.refresh_games()
+        self.after(350, self.show_release_notes)
 
     def _configure_style(self) -> None:
-        self.configure(bg="#10151c")
+        self.configure(bg=BG_COLOR)
         style = ttk.Style(self)
         style.theme_use("clam")
-        style.configure("App.TFrame", background="#10151c")
-        style.configure("Panel.TFrame", background="#171e27")
-        style.configure("Brand.TLabel", background="#10151c", foreground="#f2f5f8", font=("DejaVu Sans", 24, "bold"))
-        style.configure("Subtitle.TLabel", background="#10151c", foreground="#91a0af", font=("DejaVu Sans", 10))
-        style.configure("Title.TLabel", background="#10151c", foreground="#f2f5f8", font=("DejaVu Sans", 22, "bold"))
-        style.configure("Muted.TLabel", background="#10151c", foreground="#91a0af", font=("DejaVu Sans", 10))
-        style.configure("Panel.TLabel", background="#171e27", foreground="#dce5ed", font=("DejaVu Sans", 10))
-        style.configure("Field.TLabel", background="#171e27", foreground="#91a0af", font=("DejaVu Sans", 9))
-        style.configure("Accent.TButton", background="#3b82f6", foreground="white", padding=(14, 8), borderwidth=0)
-        style.map("Accent.TButton", background=[("active", "#2563eb")])
-        style.configure("TButton", padding=(10, 7), background="#263241", foreground="#e7edf3", borderwidth=0)
-        style.map("TButton", background=[("active", "#344354")])
-        style.configure("TEntry", fieldbackground="#202a36", foreground="#f2f5f8", insertcolor="white", borderwidth=0, padding=7)
-        style.configure("TCombobox", fieldbackground="#202a36", foreground="#f2f5f8", padding=6)
-        style.configure("Treeview", background="#171e27", fieldbackground="#171e27", foreground="#dce5ed", rowheight=36, borderwidth=0)
-        style.configure("Treeview.Heading", background="#202a36", foreground="#91a0af", relief="flat", padding=8)
-        style.map("Treeview", background=[("selected", "#245493")], foreground=[("selected", "white")])
+        style.configure("App.TFrame", background=BG_COLOR)
+        style.configure("Panel.TFrame", background=PANEL_COLOR)
+        style.configure("Brand.TLabel", background=BG_COLOR, foreground=TEXT_COLOR, font=("DejaVu Sans", 24, "bold"))
+        style.configure("Subtitle.TLabel", background=BG_COLOR, foreground=ACCENT_COLOR, font=("DejaVu Sans", 10))
+        style.configure("Title.TLabel", background=BG_COLOR, foreground=TEXT_COLOR, font=("DejaVu Sans", 22, "bold"))
+        style.configure("SelectedTitle.TLabel", background=PANEL_COLOR, foreground=ACCENT_COLOR, font=("DejaVu Sans", 22, "bold"))
+        style.configure("Muted.TLabel", background=BG_COLOR, foreground=MUTED_COLOR, font=("DejaVu Sans", 10))
+        style.configure("Panel.TLabel", background=PANEL_COLOR, foreground=TEXT_COLOR, font=("DejaVu Sans", 10))
+        style.configure("Field.TLabel", background=PANEL_COLOR, foreground=MUTED_COLOR, font=("DejaVu Sans", 9))
+        style.configure("Accent.TButton", background=ACCENT_COLOR, foreground="#07111f", padding=(14, 8), borderwidth=0, font=("DejaVu Sans", 9, "bold"))
+        style.map("Accent.TButton", background=[("active", "#7dd3fc")])
+        style.configure("Danger.TButton", background="#3a2029", foreground="#fda4af", padding=(10, 7), borderwidth=0)
+        style.map("Danger.TButton", background=[("active", "#542532")])
+        style.configure("TButton", padding=(10, 7), background="#243247", foreground=TEXT_COLOR, borderwidth=0)
+        style.map("TButton", background=[("active", "#33445d")])
+        style.configure("TEntry", fieldbackground=FIELD_COLOR, foreground=TEXT_COLOR, insertcolor="white", borderwidth=0, padding=8)
+        style.configure("TCombobox", fieldbackground=FIELD_COLOR, foreground=TEXT_COLOR, padding=7)
+        style.configure("Treeview", background=PANEL_COLOR, fieldbackground=PANEL_COLOR, foreground=TEXT_COLOR, rowheight=42, borderwidth=0, font=("DejaVu Sans", 10))
+        style.configure("Treeview.Heading", background=FIELD_COLOR, foreground=MUTED_COLOR, relief="flat", padding=10, font=("DejaVu Sans", 9, "bold"))
+        style.map("Treeview", background=[("selected", "#164e63")], foreground=[("selected", "white")])
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self, style="App.TFrame", padding=24)
@@ -67,11 +81,14 @@ class LauncherWindow(tk.Tk):
         ttk.Label(header, text=f"Catalogue local · {launcher.GAMES_FILE}", style="Muted.TLabel").pack(side="left", padx=20, pady=(22, 0))
         self.stats_var = tk.StringVar(value="0 jeu")
         ttk.Label(header, textvariable=self.stats_var, style="Muted.TLabel").pack(side="right", padx=14, pady=(9, 0))
-        ttk.Button(header, text="Mises à jour", command=self.check_updates).pack(side="right", padx=(0, 8))
-        ttk.Button(header, text="Vider la liste", command=self.clear_games).pack(side="right", padx=(0, 8))
-        ttk.Button(header, text="Chercher dans un dossier", command=self.search_folder).pack(side="right", padx=(0, 8))
-        ttk.Button(header, text="Détecter", command=self.detect_games).pack(side="right", padx=(0, 8))
-        ttk.Button(header, text="+ Ajouter un jeu", style="Accent.TButton", command=self.add_game).pack(side="right")
+        toolbar = ttk.Frame(root, style="App.TFrame")
+        toolbar.pack(fill="x", pady=(0, 14))
+        ttk.Button(toolbar, text="+ Ajouter un jeu", style="Accent.TButton", command=self.add_game).pack(side="left")
+        ttk.Button(toolbar, text="Détecter", command=self.detect_games).pack(side="left", padx=(8, 0))
+        ttk.Button(toolbar, text="Chercher dans un dossier", command=self.search_folder).pack(side="left", padx=(8, 0))
+        ttk.Button(toolbar, text="Mises à jour", command=self.check_updates).pack(side="right")
+        ttk.Button(toolbar, text="Vider la liste", command=self.clear_games).pack(side="right", padx=(0, 8))
+        ttk.Separator(root, orient="horizontal").pack(fill="x", pady=(0, 18))
 
         content = ttk.Panedwindow(root, orient="horizontal")
         content.pack(fill="both", expand=True)
@@ -82,6 +99,7 @@ class LauncherWindow(tk.Tk):
 
         search_row = ttk.Frame(library, style="Panel.TFrame")
         search_row.pack(fill="x", pady=(0, 10))
+        ttk.Label(search_row, text="BIBLIOTHÈQUE", style="Field.TLabel").pack(side="left", padx=(2, 12))
         self.search_var = tk.StringVar()
         self.search_var.trace_add("write", lambda *_: self.refresh_games())
         ttk.Entry(search_row, textvariable=self.search_var).pack(side="left", fill="x", expand=True)
@@ -98,6 +116,9 @@ class LauncherWindow(tk.Tk):
         self.tree.column("backend", width=90, anchor="center")
         self.tree.column("state", width=130, anchor="center")
         self.tree.tag_configure("game", font=("DejaVu Sans", 11, "bold"))
+        self.tree.tag_configure("verified", foreground=SUCCESS_COLOR)
+        self.tree.tag_configure("warning", foreground=WARNING_COLOR)
+        self.tree.tag_configure("disabled", foreground="#718096")
         self.tree.pack(side="left", fill="both", expand=True)
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
         scrollbar.pack(side="right", fill="y")
@@ -110,7 +131,7 @@ class LauncherWindow(tk.Tk):
 
         ttk.Label(details, text="Configuration du jeu", style="Panel.TLabel", font=("DejaVu Sans", 10)).pack(anchor="w")
         self.selected_title_var = tk.StringVar(value="Aucun jeu sélectionné")
-        ttk.Label(details, textvariable=self.selected_title_var, style="Panel.TLabel", font=("DejaVu Sans", 22, "bold")).pack(anchor="w", pady=(2, 16))
+        ttk.Label(details, textvariable=self.selected_title_var, style="SelectedTitle.TLabel").pack(anchor="w", pady=(2, 16))
         self.name_var = tk.StringVar()
         self.backend_var = tk.StringVar(value="auto")
         self.prefix_var = tk.StringVar()
@@ -125,20 +146,25 @@ class LauncherWindow(tk.Tk):
         self._field(details, "Prefix Wine", self.prefix_var, browse="directory")
         self._field(details, "Répertoire de travail", self.workdir_var, browse="directory")
         ttk.Label(details, text="Arguments (un par ligne)", style="Field.TLabel").pack(anchor="w", pady=(14, 4))
-        self.arguments_text = tk.Text(details, height=4, bg="#202a36", fg="#f2f5f8", insertbackground="white", relief="flat", padx=8, pady=7)
+        self.arguments_text = tk.Text(details, height=4, bg=FIELD_COLOR, fg=TEXT_COLOR, insertbackground="white", relief="flat", padx=8, pady=7)
         self.arguments_text.pack(fill="x")
         ttk.Label(details, text="Variables d’environnement (KEY=VALUE, une par ligne)", style="Field.TLabel").pack(anchor="w", pady=(12, 4))
-        self.environment_text = tk.Text(details, height=4, bg="#202a36", fg="#f2f5f8", insertbackground="white", relief="flat", padx=8, pady=7)
+        self.environment_text = tk.Text(details, height=4, bg=FIELD_COLOR, fg=TEXT_COLOR, insertbackground="white", relief="flat", padx=8, pady=7)
         self.environment_text.pack(fill="x")
 
         actions = ttk.Frame(details, style="Panel.TFrame")
         actions.pack(fill="x", pady=(18, 0))
-        ttk.Button(actions, text="Enregistrer", style="Accent.TButton", command=self.save_current).pack(side="left")
-        ttk.Button(actions, text="Lancer", command=self.launch_current).pack(side="left", padx=8)
-        ttk.Button(actions, text="Diagnostiquer", command=self.diagnose_current).pack(side="left")
-        ttk.Button(actions, text="Ouvrir le dossier", command=self.open_game_folder).pack(side="left", padx=8)
-        ttk.Button(actions, text="Ouvrir les logs", command=self.open_logs).pack(side="left")
-        ttk.Button(actions, text="Supprimer", command=self.delete_current).pack(side="right")
+        self.action_buttons = [
+            ttk.Button(actions, text="Enregistrer", style="Accent.TButton", command=self.save_current),
+            ttk.Button(actions, text="Lancer", command=self.launch_current),
+            ttk.Button(actions, text="Diagnostiquer", command=self.diagnose_current),
+            ttk.Button(actions, text="Ouvrir le dossier", command=self.open_game_folder),
+            ttk.Button(actions, text="Ouvrir les logs", command=self.open_logs),
+            ttk.Button(actions, text="Supprimer", style="Danger.TButton", command=self.delete_current),
+        ]
+        for index, button in enumerate(self.action_buttons):
+            button.grid(row=0, column=index, padx=(0, 8) if index < len(self.action_buttons) - 1 else 0, pady=(0, 6), sticky="ew")
+            actions.columnconfigure(index, weight=1)
 
         self.status_var = tk.StringVar(value="Prêt")
         status = ttk.Label(root, textvariable=self.status_var, style="Muted.TLabel", anchor="w")
@@ -147,6 +173,33 @@ class LauncherWindow(tk.Tk):
         footer.pack(fill="x", pady=(6, 0))
         ttk.Label(footer, text=APP_AUTHOR, style="Muted.TLabel").pack(side="left")
         ttk.Label(footer, text="MultiLaunch · gestion locale des jeux", style="Muted.TLabel").pack(side="right")
+
+    def _on_resize(self, _: tk.Event[tk.Misc]) -> None:
+        if self._resize_pending:
+            return
+        self._resize_pending = True
+        self.after_idle(self._apply_responsive_layout)
+
+    def _apply_responsive_layout(self) -> None:
+        self._resize_pending = False
+        width = self.winfo_width()
+        tree_width = max(360, self.tree.winfo_width() - 18) if hasattr(self, "tree") else 700
+        name_width = max(150, int(tree_width * 0.48))
+        state_width = max(90, int(tree_width * 0.18))
+        platform_width = max(70, int(tree_width * 0.16))
+        backend_width = max(70, tree_width - name_width - state_width - platform_width)
+        if hasattr(self, "tree"):
+            self.tree.column("name", width=name_width)
+            self.tree.column("platform", width=platform_width)
+            self.tree.column("backend", width=backend_width)
+            self.tree.column("state", width=state_width)
+        if hasattr(self, "action_buttons"):
+            for button in self.action_buttons:
+                button.grid_forget()
+            columns = 3 if width < 1050 else len(self.action_buttons)
+            for index, button in enumerate(self.action_buttons):
+                row, column = divmod(index, columns)
+                button.grid(row=row, column=column, padx=(0, 8), pady=(0, 6), sticky="ew")
 
     def _field(self, parent: ttk.Frame, label: str, variable: tk.StringVar, readonly: bool = False,
                browse: str | None = None) -> None:
@@ -173,10 +226,22 @@ class LauncherWindow(tk.Tk):
             if query and query not in f"{game.name} {game.id} {game.executable}".casefold():
                 continue
             state = "Désactivé" if not game.enabled else resolve_status(game)
-            self.tree.insert("", "end", iid=game.id, values=(game.name, game.platform, launcher.resolve_backend(game), state), tags=("game",))
+            state_tag = "disabled" if not game.enabled else "warning" if state == "À vérifier" else "verified"
+            self.tree.insert("", "end", iid=game.id, values=(game.name, game.platform, launcher.resolve_backend(game), state), tags=("game", state_tag))
         enabled = sum(game.enabled for game in self.games)
         wine_games = sum(launcher.resolve_backend(game) in {"wine", "proton"} for game in self.games)
         self.stats_var.set(f"{len(self.games)} jeu(x) · {enabled} actif(s) · {wine_games} Windows")
+
+    def show_release_notes(self) -> None:
+        try:
+            if not launcher.should_show_updates():
+                return
+            updates = launcher.read_update_file()
+            items = "\n".join(f"• {item}" for item in updates["items"])
+            messagebox.showinfo(updates.get("title", "Nouveautés"), f"Version {updates['version']}\n\n{items}")
+            launcher.mark_updates_seen()
+        except RuntimeError as error:
+            self.status_var.set(str(error))
 
     def check_updates(self) -> None:
         self.status_var.set("Vérification de la version GitHub...")
